@@ -5,6 +5,7 @@ from warnings import warn
 
 from .api_call import def_api_call
 
+
 def resolve_type(schema) -> type:
     if '$ref' in schema:
         return ast.Constant(schema.get('$ref').removeprefix('#/components/schemas/'))
@@ -16,12 +17,10 @@ def resolve_type(schema) -> type:
         )
 
     match schema['type']:
-        case "string":
-            return ast.Name('str')
-        case "integer":
-            return ast.Name('int')
-        case "boolean":
-            return ast.Name('bool')
+        case "str" | "string": return ast.Name('str')
+        case "int" | "integer": return ast.Name('int')
+        case "float" | "number": return ast.Name('float')
+        case "boolean": return ast.Name('bool')
         case "array":
             return ast.Subscript(
                 ast.Name('list'),
@@ -81,19 +80,6 @@ class FuncArg:
     type: type
     default: Any
 
-    @staticmethod
-    def _get_type(schema: dict):
-        if enum := schema.get('enum'):
-            return Literal[*enum]
-
-        match schema.get('type'):
-            case "string":
-                return str
-            case "integer":
-                return int
-
-        return NotImplemented
-
     @classmethod
     def from_api_spec(cls, spec: dict):
         schema = spec.get('schema', {})
@@ -103,11 +89,11 @@ class FuncArg:
             description=spec.get('description'),
             required=spec.get('required', False),
             default=schema.get('default', None),
-            type=cls._get_type(schema)
+            type=resolve_type(schema)
         )
 
     def as_ast(self):
-        return ast.arg(self.name)
+        return ast.arg(self.name, self.type)
 
     def default_ast(self):
         if self.default == "null":
@@ -208,18 +194,24 @@ def generate_code(
     for name, obj_spec in obj_specs.items():
         objs.append(TypedDictSpec.from_api_spec(name, obj_spec))
 
+    base_url = schema.get('servers', [{}])[0].get('url')
+
     funcs: list[ApiCall] = []
     for path, m_spec in schema.get('paths', {}).items():
+        if len(bu := m_spec.pop('servers', [])):
+            base_url = bu[0].get('url')
+            # HACK: this does NOT handle the case in which there are muliple servers...
+
         for method, path_spec in m_spec.items():
             desc = path_spec.get('description')
             func_params = [FuncArg.from_api_spec(s)
-                      for s in path_spec.get('parameters', [])]
+                           for s in path_spec.get('parameters', [])]
+
+            # TODO: handle
             funcs.append(ApiCall(path, method, desc, func_params,
                          path_spec.get('responses')))
 
-    base_url = schema.get('servers', [{}])[0].get('url')
     if not base_url:
-        # TODO: use a default and r UserWarning instead, perhaps?
         base_url = 'https://example.org'
         warn(f'The schema does not define a base URL! The code will use {base_url}')
 

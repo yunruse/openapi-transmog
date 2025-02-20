@@ -1,14 +1,14 @@
 from argparse import ArgumentParser
-from json import loads
+from json import load as load_json
+from yaml import safe_load as load_yaml
 from pathlib import Path
-from sys import stderr
 
 from .schema import generate_code
 
 parser = ArgumentParser('python -m openapi-transmog')
 parser.add_argument(
     'schema', type=Path,
-    help="the .json file. Should be OpenAPI 3.")
+    help="the JSON or YAML file. Should be OpenAPI 3.")
 
 parser_interp = parser.add_argument_group(
     'HTTP interpolation',
@@ -58,7 +58,11 @@ load_dotenv()
 if __name__ == '__main__':
     args = parser.parse_args()
     # print(args, file=stderr)
-    schema = loads(args.schema.read_text())
+    match args.schema.suffix:
+        case ".json":
+            schema = load_json(args.schema.open())
+        case ".yaml" | ".yml":
+            schema = load_yaml(args.schema.open())
 
     print(HEADER)
     print(generate_code(
