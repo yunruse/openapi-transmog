@@ -1,4 +1,13 @@
-# openapi-transmog
+# `pip install openapi-transmog`
+
+[
+![PyPI - Version](https://img.shields.io/pypi/v/openapi-transmog)
+![Python - 3.8+](https://img.shields.io/badge/python-3.8%2B-blue)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/openapi-transmog)
+![License - MIT](https://img.shields.io/pypi/l/openapi-transmog)
+](https://pypi.org/project/openapi-transmog)
+
+
 
 A simple development tool (not a dependency!) that transforms an [OpenAPI specification](https://spec.openapis.org/oas/latest.html) into a single `.py` file that encapsulates its function calls and return types (as `TypedDict`s).
 
