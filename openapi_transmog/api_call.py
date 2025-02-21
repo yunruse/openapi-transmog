@@ -54,6 +54,13 @@ def def_api_call(
     # from requests import request
     # from os.path import expandvars
 
+    args = arguments([], [
+        arg('method', Name('str')),
+        arg('url', Name('str')),
+        arg('params', Name('dict')),
+        arg('annotators', Name('dict'))
+    ], None, [], [], None, [Dict([], [])])
+
     body = [Expr(Constant('Handler for API calls.'))]
     if params is not None:
         body += [Expr(Call(Attribute(Name('params'), 'update'), [dicts(params, 'params')], []))]
@@ -71,17 +78,28 @@ def def_api_call(
         user, pw = auth
         request_keywords += [keyword('auth', Tuple([string(user, 'username'), string(pw, 'password')]))]
 
+    body.append(Assign([
+        Name('response', Store())],
+        Call(Name('request'), [], request_keywords)))
+
+    status_code = Attribute(Name('response'), 'status_code')
+    json = Call(Attribute(Name('response'), 'json'), [], [])
+
     body += [
-        Assign([Name('response', Store())], Call(Name('request'), [], request_keywords)),
+        If(Compare(status_code, [In()], [Name('annotators')]), [
+            Return(Call(
+                Subscript(Name('annotators'), status_code),
+                [json], []
+            ))
+        ], []),
         Expr(Call(Attribute(Name('response'), 'raise_for_status'), [], [])),
-        Return(Call(Attribute(Name('response'), 'json'), [], []))
+        Return(json)
     ]
 
     return FunctionDef(
         'api_call',
-        arguments([], args=[arg('method'), arg('url'), arg('params')],
-                  kwonlyargs=[], kw_defaults=[], defaults=[]),
-        body, [], type_comment='(str, str, dict[str, str]) -> dict[str]')
+        args,
+        body, [])
 
 
 if __name__ == '__main__':

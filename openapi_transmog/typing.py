@@ -23,7 +23,6 @@ def resolve_type(schema) -> type:
             )
         case "object":
             return Name('dict')
-            # TODO: handle anonymous types
             # TypedDict('anonymous', {
             #         k: resolve_type(v) for k, v in schema.get('properties', {}).items()
             #     })f

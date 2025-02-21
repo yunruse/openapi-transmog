@@ -1,12 +1,11 @@
 [project]
 name = "openapi-transmog"
-version = "0.1.0"
+version = "0.2.0"
 description = "Simple OpenAPI transmogrifier that produces Python code"
 authors = [{ name = "Mia yun Ruse", email = "mia@yunru.se" }]
 license = { text = "MIT" }
 readme = "README.md"
-requires-python = ">=3.8"
-dependencies = []
+requires-python = ">=3.9,<4"
 
 
 [build-system]
