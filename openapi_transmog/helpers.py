@@ -3,6 +3,7 @@ Project-agnostic helper functions.
 """
 
 
+import re
 from typing import Callable, TypeVar
 import ast
 import pathlib
@@ -84,3 +85,10 @@ def argument_count(args: ast.arguments):
     if args.vararg:
         N += 1
     return N
+
+
+def camel_to_snake(camel: str):
+    "Convert camelCase to snake_case"
+    # with thanks to Nick Lombard: https://stackoverflow.com/a/12867228
+    CAMEL = re.compile(r'((?<=[a-z0-9])[A-Z]|(?!^)[A-Z](?=[a-z]))')
+    return CAMEL.sub(r'_\1', camel).lower()

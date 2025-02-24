@@ -5,7 +5,7 @@ from pathlib import Path
 from sys import stderr
 from typing import Generator
 
-from .helpers import ast_syntax_error, argument_count, split_by_predicate
+from .helpers import ast_syntax_error, argument_count, camel_to_snake, split_by_predicate
 
 
 def fdef_has_content(fdef: FunctionDef):
@@ -144,7 +144,7 @@ def get_call_annotators(
         more_explicit = f"@+{dcrtr.func.id}({default_dest!r})"
         raise ast_syntax_error(
             dcrtr,
-            "Argument annotators requires at least one argument:"
+            "Argument annotators require at least one argument:"
             f" the key of the parameter to pass to {dcrtr.func.id}."
             "\n Check the OpenAPI schema or run without annotations"
             " to find which that might be."
@@ -161,14 +161,15 @@ def get_call_annotators(
             fp, src)
 
     if len(dcrtr.args) > 1:
-        args = [f'{a.value}={a.value!r}' for a in dcrtr.args]
-        more_explicit = f"@+{dcrtr.func.id}({', '.join(args)})"
+        dcrtr_args = [f'{camel_to_snake(a.value)}={a.value!r}' for a in dcrtr.args]
+        more_explicit = f"@+{dcrtr.func.id}({', '.join(dcrtr_args)})"
+        f_args = ', '.join([camel_to_snake(a.value) for a in dcrtr.args])
 
         raise ast_syntax_error(
             dcrtr.args[1],
-            "Cannot annotate an API call with multiple argument names in this way:"
-            f" only one can be renamed {default_dest}."
-            f"\nConsider: {more_explicit}",
+            f"Argument annotators should have explicit argument names."
+            f"\nConsider: {more_explicit}"
+            f"\n if you want it to be called as {dcrtr.func.id}({f_args}, ...)",
             fp, src)
 
     if len(dcrtr.args) and len(dcrtr.keywords):
