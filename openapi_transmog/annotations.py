@@ -10,14 +10,16 @@ from .helpers import ast_syntax_error, argument_count, camel_to_snake, split_by_
 
 def fdef_has_content(fdef: FunctionDef):
     """
-    False iff a function AST node contains only `pass` or `...` in its body.
+    False iff a function AST node contains `pass`, `...`, a docstring or bare return.
     """
     if len(fdef.body) == 1:
         if isinstance(fdef.body[0], Pass):
             return False
         if isinstance(fdef.body[0], Expr):
             if isinstance(fdef.body[0].value, Constant):
-                return fdef.body[0].value.value is not ...
+                return True
+        if isinstance(fdef.body[0], Return) and fdef.body[0].value is None:
+            return True
     return True
 
 
@@ -27,7 +29,17 @@ class Argument:
     name: str
 
     @property
+    def hides_argument(self):
+        return self.name is None
+
+    @property
+    def has_return_value(self):
+        return fdef_has_content(self.fdef)
+
+    @property
     def type(self):
+        if self.hides_argument:
+            return Constant(None)
         return self.fdef.args.args[0].annotation
 
     @property
@@ -60,11 +72,15 @@ class Applicator(NodeTransformer):
         argname = name
 
         if ann and fdef_has_content(ann.fdef):
-            argname = ann.fdef.args.args[0].arg
             expr = Call(Name(ann.fdef.name), [Name(name)], [])
             returns = deepcopy(ann.fdef.body[0])
             if isinstance(returns, Return):
-                expr = returns.value
+                expr = returns.value or Name('None')
+
+            if not len(ann.fdef.args.args):
+                # function takes no parameters; no need to transform via argument name
+                return expr
+            argname = ann.fdef.args.args[0].arg
 
         return cls(argname, name, isinstance(ann, Property)).visit(expr)
 
@@ -118,17 +134,40 @@ def get_call_annotators(
 
     assert isinstance(dcrtr.func, Name), "Decorator should be the name of a function!"
 
-    N = argument_count(fdef.args)
+    N_fargs = argument_count(fdef.args)
 
-    if N == 0:
-        raise ast_syntax_error(
-            fdef,
-            "Argument annotators cannot work on functions that take no input",
-            # TODO: why not? We could delete the parameter,
-            # hiding it from the encapsulation?
-            fp, src)
+    if N_fargs == 0:
+        # special case, as the function is empty: we're hiding these parameters
+        if len(dcrtr.keywords):
+            args = [f'{a.value!r}' for a in dcrtr.args]
+            args += [f'{unparse(k.value)}' for k in dcrtr.keywords]
+            more_explicit = f"@+{dcrtr.func.id}({', '.join(args)})"
+            func_arg = dcrtr.keywords[0].arg
+            api_arg = dcrtr.keywords[0].value
+            raise ast_syntax_error(
+                dcrtr.keywords[0],
+                f"No need to specify argument {func_arg} for the function."
+                f"\nAs {fdef.name}() takes no input, it is assumed that {dcrtr.func.id},"
+                f"\nlikewise, takes no argument to specify {unparse(api_arg)}."
+                f"\nConsider: {more_explicit}"
+                f"\n          or, if you wanted {unparse(api_arg)} to be defined by the user:"
+                f"\n          def {fdef.name}({func_arg}):",
+                fp, src)
 
-    if N > 1 or fdef.args.kwarg or fdef.args.vararg:
+        if not dcrtr.args:
+            raise ast_syntax_error(
+                dcrtr,
+                "Argument annotators require at least one argument:"
+                f" the key of the parameter to pass to {dcrtr.func.id}."
+                "\n Check the OpenAPI schema or run without annotations"
+                " to find which that might be.",
+                fp, src)
+
+        for arg in dcrtr.args:
+            yield None, arg.value
+        return
+
+    if N_fargs > 1 or fdef.args.kwarg or fdef.args.vararg:
         raise ast_syntax_error(
             fdef,
             f"Argument annotators can only modify one parameter."
@@ -136,7 +175,7 @@ def get_call_annotators(
             f" to encapsulate {dcrtr.func.id}.",
             fp, src)
 
-    assert N == 1 and len(fdef.args.args) == 1, "incomprehensible function definition"
+    assert N_fargs == 1 and len(fdef.args.args) == 1, "incomprehensible function definition"
     default_dest = fdef.args.args[0].arg
 
     if len(dcrtr.args) == len(dcrtr.keywords) == 0:

@@ -76,7 +76,7 @@ class FuncArg:
     required: bool
     type: type
     default: expr
-    arg_ann: Argument
+    arg_ann: Argument | None
 
     @classmethod
     def from_api_spec(cls, spec: dict, arg_ann: Argument | None):
@@ -92,6 +92,11 @@ class FuncArg:
             arg_ann=arg_ann,
         )
 
+    def include_in_fdef(self):
+        if self.arg_ann:
+            return not self.arg_ann.hides_argument
+        return True
+
     def as_ast(self):
         return arg(self.name, self.type)
 
@@ -101,6 +106,11 @@ class FuncArg:
         if self.default == "null":
             return Constant(None)
         return Constant(self.default)
+
+    def has_value(self):
+        if self.arg_ann:
+            return self.arg_ann.has_return_value
+        return True
 
     def value(self):
         return Applicator.apply(self.arg_ann, self.name)
@@ -169,11 +179,12 @@ class ApiCall:
         # any 'mandatory' FuncArgs should have a default
         # if they don't leave any gaps.
         defaults = [
-            p.default_ast() for p in self.parameters if not p.required
+            p.default_ast() for p in self.parameters
+            if p.include_in_fdef() and not p.required
         ]
 
         return arguments(
-            args=[p.as_ast() for p in self.parameters],
+            args=[p.as_ast() for p in self.parameters if p.include_in_fdef()],
             defaults=defaults,
             posonlyargs=[],
             kwonlyargs=[],
@@ -189,13 +200,17 @@ class ApiCall:
             args=[],
             keywords=[keyword(a.dest_name, a.value()) for a in url_args]
         )
-        params = Dict(
-            [Constant(a.dest_name) for a in param_args],
-            [a.value() for a in param_args],
-        )
-        annotators = Dict([], [])
+        # print(param_args)
+        params = {
+            Constant(a.dest_name): a.value()
+            for a in param_args if a.has_value()
+        }
+        params = Dict(params.keys(), params.values())
+        # print(unparse(fix_missing_locations(params)))
+
         # TODO: fetch annotators by HTTP status code
-        # and imbue
+        # and imbue with any ._from_api
+        annotators = Dict([], [])
 
         body = []
         if self.description:
