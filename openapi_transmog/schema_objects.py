@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from functools import reduce
 from sys import stderr
-from typing import Any
+import textwrap
 
 from .helpers import split_by_predicate
 
@@ -33,11 +33,28 @@ class TypedDictSpec:
 
         return cls(name, prop_spec.get('description'), properties, prop_anns)
 
+    def docstring(self):
+        parts = []
+        if self.description:
+            parts.append(self.description)
+
+        # TODO: add these
+        # for p in self.parameters:
+        #     if p.description:
+        #         desc = p.description.replace('\n', ' ')
+        #         parts.append(f":param {p.name}: {desc}")
+
+        if len(parts) > 2:
+            parts.insert(1, "")  # linebreak
+
+        if parts:
+            return textwrap.indent('\n'.join(['', *parts, '    ']), '    ')
+
     @property
     def body(self):
         body = []
-        if self.description:
-            body.append(Expr(Constant(self.description)))
+        if doc := self.docstring():
+            body.append(Expr(Constant(doc)))
         body += [
             AnnAssign(Name(k), v, simple=1)
             for k, v in self.properties.items()
@@ -191,6 +208,23 @@ class ApiCall:
             kw_defaults=[]
         )
 
+    def docstring(self):
+        parts = []
+        if self.description:
+            parts.append(self.description)
+
+        for p in self.parameters:
+            if p.description and p.name:
+                desc = p.description.replace('\n', ' ')
+                parts.append(f":param {p.name}: {desc}")
+
+        # TODO: add `return` description if necessary
+
+        if len(parts) > 2:
+            parts.insert(1, "")  # linebreak
+        if parts:
+            return textwrap.indent('\n'.join(['', *parts, '    ']), '    ')
+
     @property
     def body(self) -> list[stmt]:
         url_args, param_args = split_by_predicate(self.parameters, lambda p: p.in_path)
@@ -213,8 +247,8 @@ class ApiCall:
         annotators = Dict([], [])
 
         body = []
-        if self.description:
-            body.append(Expr(Constant(self.description)))
+        if doc := self.docstring():
+            body.append(Expr(Constant(doc)))
         body.append(Return(Call(Name('api_call'), [
             Constant(self.method),
             url,
